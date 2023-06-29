@@ -11,6 +11,7 @@ namespace MeetUpBot.Models
         public ICollection<User> Participants { get;set; }
         public string Stage { get; set; }
         public DateTime Time { get; set; }
+        public ICollection<Invitation> Invitations { get; set; }
         public MeetUp()
         {
             Participants = new List<User>();

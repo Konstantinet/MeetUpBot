@@ -52,25 +52,25 @@ async Task SendStatus(ChatId chatId, MeetUp Meeting)
     using (var db = new MyDbContext())
     {
         //var meeting = db.MeetUps.ToList().Where(s => s.Id == Meeting.Id).First();
-        string Time = "Is being confirmed";
+        string Time = "Уточняется";
         string stage;
         if (Meeting.Stage == CreationStages.Finished.ToString()) 
         {
-            stage = "\xE2\x9C\x85 Sheduled";
+            stage = "\u2705 Потверждено";
             Time = Meeting.Time.TimeOfDay.ToString();
         }
 		else if (Meeting.Stage == CreationStages.TimeCoordination.ToString())
 		{
-			stage = "Waiting for other participants";
+			stage = "Ожидаем ответа участников";
 		}
 		else
 		{
-			stage = "Editing";
+			stage = "Редактируется";
 		}
-        string status = $"Theme:{Meeting.Theme}\n" +
-                        $"Description:{Meeting.Description}\n" +
-                        $"Status:{stage}\n"+
-                        $"Time:{Time}";
+        string status = $"Тема : {((Meeting.Theme != null)? Meeting.Theme:"Уточняется")}\n" +
+                        $"Описание : {((Meeting.Description != null) ? Meeting.Theme : "Уточняется")}\n" +
+                        $"Статус : {stage}\n"+
+                        $"Время : {Time}";
 		Message sentMessage = await botClient.SendTextMessageAsync(
 						chatId: chatId,
                         text: status,
@@ -135,55 +135,62 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Telegram.Bot.Types.Up
                         }
                         else if (messageText == "Finish")
                         {
-                            
-                            bool Approved = true;
+
+                            bool TimeApproved = true;
+                            foreach (var u in Meeting.Participants)
+                            {
+                                if (u.TimeChosen == false)
+                                    TimeApproved = false;
+                            }
                             /*var checker = db.Users.Where(
                                 u => u.Id == (db.TimeSlots.GroupBy(t => t.User).Where(
 							    t => (t.Count()) == (db.TimeSlots.GroupBy(ts => ts.User).Min(g => g.Count()))).Select(ts=>ts.Key).First()).Id
                                 );*/
-                            var checker = db.Users.First();
-							DateTime ApprovedTime = db.TimeSlots.Where(ts=>ts.User == checker).First().Start;
-							foreach (var tt in db.TimeSlots.GroupBy(ts => ts.User))
+                            if (TimeApproved == true)
                             {
-                                Approved = true;
-                                if (tt.Key != checker)
+                                bool Approved = true;
+                                var checker = db.Users.First();
+                                DateTime ApprovedTime = db.TimeSlots.Where(ts => ts.User == checker).First().Start;
+                                foreach (var tt in db.TimeSlots.GroupBy(ts => ts.User))
                                 {
-                                    foreach (var ts in tt)
+                                    Approved = true;
+                                    if (tt.Key != checker)
                                     {
-                                        if (db.TimeSlots.Where(t => t.User == checker).Contains(ts)) 
+                                        foreach (var ts in tt)
                                         {
-                                            if (ApprovedTime != null)
+                                            if (db.TimeSlots.Where(t => t.User == checker).Contains(ts))
+                                            {
+
                                                 if (ApprovedTime == ts.Start)
                                                 {
                                                     Approved = true;
                                                 }
-                                                else 
+                                                else
                                                 {
                                                     Approved = false;
                                                     break;
                                                 }
-                                            else 
-                                            {
-                                                ApprovedTime = ts.Start;
-                                                Approved = true;
                                             }
-									    }
+                                        }
                                     }
                                 }
+                                Meeting.Stage = CreationStages.Finished.ToString();
+                                if (Approved == true)
+                                {
+                                    Meeting.Time = (DateTime)ApprovedTime;
+                                    await SendStatus(chatId, Meeting);
+                                    await SendMessage(chatId, "Choose an option", ReplyMenu.replyKeyboardMarkup, cancellationToken: cancellationToken);
+                                }
+                                else
+                                {
+                                    await SendMessage(chatId, "Не удалось согласовать время встречи", cancellationToken: cancellationToken);
+                                }
                             }
-							Meeting.Stage = CreationStages.Finished.ToString();
-							if (Approved == true)
-                            {
-                                Meeting.Time = (DateTime)ApprovedTime;
-                                await SendStatus(chatId, Meeting);
-								await SendMessage(chatId, "Choose an option", ReplyMenu.replyKeyboardMarkup, cancellationToken: cancellationToken);
-							}
                             else
                             {
-                                await SendMessage(chatId, "Не удалось согласовать время встречи", cancellationToken: cancellationToken);
+                                await SendMessage(chatId, "Дождитесь согласования времени участников", cancellationToken: cancellationToken);
                             }
-                            
-							db.SaveChanges();
+                            db.SaveChanges();
 						}
                         else if (messageText.Contains('@'))
                         {
@@ -191,19 +198,20 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Telegram.Bot.Types.Up
                             MeetUpBot.Models.User user;
                             if (db.Users.ToList().Where(p => p.TelegramID == id).Count() == 0)
                             {
-                                throw new Exception("Unknown user");
-                            }
+								await SendMessage(chatId, "Неизвестный пользователь", cancellationToken: cancellationToken);
+							}
                             else
                             {
+                                
                                 user = db.Users.ToList().Where(p => p.TelegramID == id).First();
-
-                            }
-                            if (Meeting.Participants.Where(u => u.Id == user.Id).Count() == 0)
-                            {
-                                Meeting.Participants.Add(user);
-                            }
-                            db.SaveChanges();
-                            await SendMessage(user.ChatID, "Выберите удобное время", ReplyMenu.DateChoose, cancellationToken: cancellationToken);
+								if (Meeting.Participants.Where(u => u.Id == user.Id).Count() == 0)
+								{
+									Meeting.Participants.Add(user);
+                                    db.SaveChanges();
+                                }
+								if(user.TimeChosen == false)
+								    await SendMessage(user.ChatID, $"{message.From.FirstName} {message.From.LastName} приглашает вас на встречу\n", ReplyMenu.DateChoose, cancellationToken: cancellationToken);
+							}
                         }
 
                         else if (Stage == CreationStages.ThemeCreation.ToString())
@@ -229,7 +237,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Telegram.Bot.Types.Up
                 {
                     if (messageText == "/start")
                     {
-                        var user = new MeetUpBot.Models.User { TelegramID = message.From.Username, ChatID = chatId };
+                        var user = new MeetUpBot.Models.User { Name = message.From.FirstName,Surname = message.From.LastName, TelegramID = message.From.Username, ChatID = chatId };
                         db.Users.Add(user);
                         db.SaveChanges();
                     }
@@ -241,18 +249,22 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Telegram.Bot.Types.Up
     {
         using (var db = new MyDbContext())
         {
-            var user = update.PollAnswer.User;
+            var user = db.Users.Where(u=>u.ChatID == update.PollAnswer.User.Id).First();
             foreach (var option in update.PollAnswer.OptionIds)
             {
                 var text = ReplyMenu.TimePoll[option];
-                db.TimeSlots.Add(new TimeSlot
+                if (db.TimeSlots.ToList().Where(t=>t.Start == 
+                                DateTime.Parse(string.Format(DateTime.Now.ToString("d"), text.Split(' ')[0]))).Count() == 0)
                 {
-                    User = db.Users.Where(u => u.ChatID == user.Id).First(),
-                    Start = DateTime.Parse(text.Split(' ')[0])
-                });
-                db.SaveChanges();
-                
+                    db.TimeSlots.Add(new TimeSlot
+                    {
+                        User = db.Users.Where(u => u.ChatID == user.Id).First(),
+                        Start = DateTime.Parse(text.Split(' ')[0])
+                    });
+                } 
             }
+            user.TimeChosen = true;
+            db.SaveChanges();
         }
 	}
 	if (update.Type == UpdateType.CallbackQuery)
@@ -268,6 +280,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Telegram.Bot.Types.Up
 				options: ReplyMenu.TimePoll,
 				allowsMultipleAnswers: true,
                 isAnonymous: false,
+
 				cancellationToken: cancellationToken);
 		}
 	}

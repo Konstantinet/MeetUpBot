@@ -7,7 +7,8 @@ namespace MeetUpBot
     {
         public MyDbContext()
         {
-        //    Database.EnsureCreated();
+            
+            Database.EnsureCreated();
         }
 
 		protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -17,5 +18,28 @@ namespace MeetUpBot
 		public DbSet<User> Users  => Set<User>();
 		public DbSet<MeetUp> MeetUps => Set<MeetUp>();
 		public DbSet<TimeSlot> TimeSlots => Set<TimeSlot>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder
+                .Entity<MeetUp>()
+                .HasMany(c => c.Participants)
+                .WithMany(s => s.Meetings)
+                .UsingEntity<Invitation>(
+                   j => j
+                    .HasOne(pt => pt.User)
+                    .WithMany(t => t.Invitations)
+                    .HasForeignKey(pt => pt.UserId),
+                j => j
+                    .HasOne(pt => pt.MeetUp)
+                    .WithMany(p => p.Invitations)
+                    .HasForeignKey(pt => pt.MeetUpId),
+                j =>
+                {
+                    j.Property(pt => pt.TimeApproved).HasDefaultValue(false);
+                    j.HasKey(t => new { t.MeetUpId, t.UserId });
+                    j.ToTable("Invitations");
+                });
+        }
     }
 }

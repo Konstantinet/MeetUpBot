@@ -38,7 +38,7 @@ namespace MeetUpBot
         };
         public static InlineKeyboardMarkup DateChoose = new(new[]
         {
-            new[] {InlineKeyboardButton.WithCallbackData (text:$"{DateTime.Now.Date}",callbackData: $"{DateTime.Now.Date}") }
+            new[] {InlineKeyboardButton.WithCallbackData (text:$"{DateTime.Now.Date.ToString("d")}",callbackData: $"{DateTime.Now.Date.ToString("d")}") }
             //new[] {InlineKeyboardButton.WithCallbackData (text:$"{DateTime.Now.AddDays(1).Date}",callbackData:$"{DateTime.Now.AddDays(1).Date}" ) },
             //new[] {InlineKeyboardButton.WithCallbackData (text: $"{DateTime.Now.AddDays(1).Date}", callbackData:$"{DateTime.Now.AddDays(1).Date}") }
         });
